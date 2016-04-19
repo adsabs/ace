@@ -1,5 +1,7 @@
 # Astrophysics concept extraction: Ace
 
+**tl; dr**: Take a look at a supervised learning prototype [here](r_and_d/rnd.py) or a simple extraction example <a href="https://github.com/inveniosoftware/invenio-classifier">here</a>.
+
 A brief specification and description of how we want to extract *concepts*, *keywords*, *sentiment*, and other semantic features from the full-text content of the Astrophysics Data System document corpus.
 
 # Requirements
