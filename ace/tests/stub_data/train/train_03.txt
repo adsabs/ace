@@ -1,0 +1,1 @@
+The millenium simulation is an N-body simulation that tries to replicate the physics of the Universe, including both dynamics as a result of gravity, attraction due to potential, and as of Gadget 3.0, there is also chemistry, and other feedback mechanisms from supernovae.

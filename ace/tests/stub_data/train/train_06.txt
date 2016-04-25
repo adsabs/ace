@@ -1,0 +1,1 @@
+There are two types of supernovae, I and II. Type I are believed to be the result of the collapse of old stars that reach the Chandresekhar limit and are at the end of their lives. Type II are believed to be young stars of large mass, that burn their fuel relatively quickly, and collapse via core-collapse (ie., they collapse under their own gravitational pull).

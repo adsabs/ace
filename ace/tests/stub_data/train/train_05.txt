@@ -1,0 +1,1 @@
+Photometric follow-up of gamma-ray burst afterglows can result in the determination of photometric redshifts as a result of their power law spectra, which can quite nicely show the drop-off due to the Lyman-alpha absorption from hydrogen.

@@ -1,0 +1,5 @@
+r_and_d/data
+r_and_d/vocab
+r_and_d/*.json
+.vagrant
+*.pyc
