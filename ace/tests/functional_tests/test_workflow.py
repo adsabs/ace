@@ -2,6 +2,8 @@
 Simple functional tests to test the workflow
 """
 
+import mock
+
 from ace import Corpus
 from unittest import TestCase, skip
 
@@ -89,7 +91,8 @@ class TestCorpus(TestCase):
         self.corpus.train(
             X_training_data=self.corpus.training_documents,
             y_training_data=self.corpus.training_keywords,
-            batch_size=2
+            batch_size=2,
+            n_iter=3
         )
 
         keys = self.corpus.training.keys()
@@ -104,12 +107,40 @@ class TestCorpus(TestCase):
             3
         )
 
-        text_X = ['spectroscopy of gamma-ray bursts spectroscopy']
+        text_X = ['spectroscopy of gamma-ray bursts spectroscopy',
+                  'simulations of galaxies']
         test_X = self.corpus.vectorizer.transform(text_X)
+
+        test_Y = [['gamma-ray burst'], ['galaxy']]
 
         prediction = self.corpus.predict(test_X)
 
         self.assertTrue(len(prediction) > 0)
+
+        recall = self.corpus.recall(test_Y, prediction)
+        self.assertAlmostEqual(recall, 0.75, delta=0.01)
+
+        precision = self.corpus.precision(test_Y, prediction)
+        self.assertAlmostEqual(precision, 0.22, delta=0.01)
+
+        fbeta_1 = self.corpus.fbeta_score(precision, recall, beta=1)
+        self.assertAlmostEqual(fbeta_1, 0.35, delta=0.01)
+
+    def test_save_model(self):
+        """
+        Test that we can save the model to disk
+        """
+        self.corpus.train(
+            X_training_data=self.corpus.training_documents,
+            y_training_data=self.corpus.training_keywords,
+            batch_size=2
+        )
+
+        m = mock.mock_open()
+        with mock.patch('ace.open', m, create=True):
+            self.corpus.save()
+
+        m.assert_called_once_with('models/classifiers.m', 'w')
 
     #
     # @mock.patch('ace.manage.codecs.open')

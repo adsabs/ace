@@ -10,7 +10,7 @@ import math
 import codecs
 import itertools
 
-from sklearn.naive_bayes import MultinomialNB
+from sklearn import metrics
 from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn.feature_extraction.text import HashingVectorizer
 from sklearn.linear_model import SGDClassifier, SGDRegressor
@@ -47,18 +47,31 @@ class Corpus(object):
 
     def __init__(self, data_path='ace/data'):
         self.vectorizer = HashingVectorizer(
-            decode_error='ignore',
-            n_features=2**18,
+            encoding='utf-8',
+            # strip_accents='unicode',
+            # analyzer='word',
+            # stop_words='english',
+            # lowercase=True,
+            # norm=None,
+            binary=False,
             non_negative=True,
-            norm=None,
+            # decode_error='ignore',
+            # n_features=2**18,
+            # non_negative=True,
+            # norm=None,
             analyzer=text_to_vector
         )
-        self.classifier = SGDClassifier(loss='log')
+        # self.classifier = SGDClassifier(loss='log')
         self.labelizer = None
 
         self.training_path = os.path.expanduser('{}/train'.format(data_path))
-        self.training_documents = glob.glob('{}/*.txt'.format(self.training_path))
-        self.training_keywords = glob.glob('{}/*.key'.format(self.training_path))
+
+        docs = glob.glob('{}/*.txt'.format(self.training_path))
+        self.training_documents = []
+        self.training_keywords = []
+        for i in range(len(docs)):
+            self.training_documents.append(docs[i])
+            self.training_keywords.append(docs[i].replace('.txt', '.key'))
 
         self.training = dict()
 
@@ -90,7 +103,7 @@ class Corpus(object):
         :return: iterator
         """
 
-        number_of_batches = int(math.ceil(len(document_list) / batch_size))
+        number_of_batches = int(math.ceil(len(document_list) / (batch_size*1.0)))
 
         for i in range(number_of_batches):
             yield self.get_batch(
@@ -116,7 +129,7 @@ class Corpus(object):
 
         return hashmap.keys()
 
-    def train(self, X_training_data=None, y_training_data=None, batch_size=1):
+    def train(self, X_training_data=None, y_training_data=None, batch_size=1, n_iter=1):
         """
         Use the training documents to fit a classifier.
         """
@@ -136,55 +149,56 @@ class Corpus(object):
         self.training['total_time_taken'] = 0
         self.training['accuracy'] = []
 
-        self.classifiers = {i: SGDClassifier() for i in classes}
+        self.classifiers = {i: SGDClassifier(loss='log', fit_intercept=True) for i in classes}
 
-        for documents, keywords in itertools.izip_longest(
-                self.document_batch(
-                    document_list=X_training_data,
-                    batch_size=batch_size),
-                self.document_batch(
-                    document_list=y_training_data,
-                    batch_size=batch_size)
-        ):
-            t_start = time.time()
+        t_start = time.time()
+        for i in range(n_iter):
+            for documents, keywords in itertools.izip_longest(
+                    self.document_batch(
+                        document_list=X_training_data,
+                        batch_size=batch_size),
+                    self.document_batch(
+                        document_list=y_training_data,
+                        batch_size=batch_size)
+            ):
 
-            X_train = self.vectorizer.transform(documents)
+                X_train = self.vectorizer.transform(documents)
 
-            # [
-            #  [1, 30, 40, 1, 3, 50],
-            #  [30, 20, 1, 30, 40, 50]
-            # ]
-            print([[k for k in key.split('\n') if k != ''] for key in keywords])
-            y_train = self.labelizer.fit_transform(
-                [[k for k in key.split('\n') if k != ''] for key in keywords]
-            )
-            # i (row): single document
-            # j (col): keyword
-            # [
-            #   [1, 0, 1, 0],
-            #   [0, 1, 1, 1]
-            # ]
-            # Want to pass a block X of documents, with a single keyword, 1 or 0
-            # For example, the first classifier would receive:
-            # X = [
-            #  [1, 30, 40, 1, 3, 50]
-            #  [30, 20, 1, 30, 40, 50]
-            # ]
-            # Y = [1, 0, 1, 0]
-
-            for label in classes:
-
-                y_t = y_train[:, self.labelizer.classes.index(label)]
-                self.classifiers[label].partial_fit(
-                    X=X_train,
-                    y=y_t,
-                    classes=[label, u'not {}'.format(label)]
+                # [
+                #  [1, 30, 40, 1, 3, 50],
+                #  [30, 20, 1, 30, 40, 50]
+                # ]
+                y_train = self.labelizer.fit_transform(
+                    [[k for k in key.split('\n') if k != ''] for key in keywords]
                 )
+                # i (row): single document
+                # j (col): keyword
+                # [
+                #   [1, 0, 1, 0],
+                #   [0, 1, 1, 1]
+                # ]
+                # Want to pass a block X of documents, with a single keyword, 1 or 0
+                # For example, the first classifier would receive:
+                # X = [
+                #  [1, 30, 40, 1, 3, 50]
+                #  [30, 20, 1, 30, 40, 50]
+                # ]
+                # Y = [1, 0, 1, 0]
 
-            t_stop = time.time()
+                for label in classes:
+
+                    y_t = y_train[:, self.labelizer.classes.index(label)]
+                    print y_t, y_t.shape, X_train.shape
+                    self.classifiers[label].partial_fit(
+                        X=X_train,
+                        y=y_t,
+                        classes=[label, u'not {}'.format(label)]
+                    )
 
             self.training['n_train'] += 1
-            self.training['total_time_taken'] += (t_stop - t_start)
+
+        t_stop = time.time()
+        self.training['total_time_taken'] += (t_stop - t_start)
 
     def predict(self, X):
         """
@@ -192,10 +206,95 @@ class Corpus(object):
         :param X: data to put in the function
         """
         labels = []
-        for label in self.classifiers:
-            # print self.classifiers[label].predict(X)
-            true_labels = [i for i in self.classifiers[label].predict(X) if i != 'not {}'.format(label)]
-            labels.extend(true_labels)
+
+        for x in X:
+            x_labels = []
+
+            for label in self.classifiers:
+
+                p = self.classifiers[label].predict(x)
+                print label, self.classifiers[label].predict_proba(x), self.classifiers[label].classes_
+                if p != u'not {}'.format(label):
+                    x_labels.extend(p)
+
+            labels.append(x_labels)
 
         return labels
 
+    def recall(self, Y_exp, Y_pred):
+        """
+        Recall
+        :param Y_exp:
+        :param Y_pred:
+        :return:
+        """
+        true_positive, false_negative, recall = [], [], []
+        for ye, yp in zip(Y_exp, Y_pred):
+            true_positive.extend([1 for i in yp if i in ye])
+            false_negative.extend([1 for i in ye if i not in yp])
+
+            tp = sum(true_positive)*1.0
+            fn = sum(false_negative)*1.0
+
+            recall.append(
+                tp / (tp + fn)
+            )
+
+        return sum(recall) / len(recall)*1.0
+
+    def precision(self, Y_exp, Y_pred):
+        """
+        Precision
+        :param Y_exp:
+        :param Y_pred:
+        :return:
+        """
+        true_positive, false_positive, precision = [], [], []
+
+        for ye, yp in zip(Y_exp, Y_pred):
+            true_positive.extend([1 for i in yp if i in ye])
+            false_positive.extend([1 for i in yp if i not in ye])
+
+            tp = sum(true_positive)*1.0
+            fp = sum(false_positive)*1.0
+
+            precision.append(
+                tp / (tp + fp)
+            )
+
+        return sum(precision) / len(precision)*1.0
+
+    def fbeta_score(self, precision, recall, beta):
+        """
+        F-beta score
+        :param precision:
+        :param recall:
+        :param beta:
+        :return:
+        """
+        return (1+beta**2)*(precision*recall)/(beta**2*precision + recall)
+
+    def save(self):
+        """
+        Save model to disk
+        """
+        from cPickle import Pickler
+
+        if self.classifiers:
+            with open('models/classifiers.m', 'w') as f:
+                pickle = Pickler(f, -1)
+                pickle.dump(self.classifiers)
+
+    #
+    # def evaluate(self, Y_exp, Y_pred):
+    #
+    #     precision, recall = [], []
+    #     for i, j in zip(Y_exp, Y_pred):
+    #
+    #         print 'yexp', Y_exp
+    #         print 'ypred', Y_pred
+    #
+    #         precision.append(metrics.precision_score(i, j))
+    #         recall.append(metrics.recall_score(i, j))
+    #
+    #     return precision, recall
