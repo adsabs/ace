@@ -143,13 +143,16 @@ class Corpus(object):
             document_list=self.training_keywords,
             batch_size=batch_size
         )
+
+        print 'Classes', classes
+
         self.labelizer = MultiLabelBinarizer(classes=classes)
 
         self.training['n_train'] = 0
         self.training['total_time_taken'] = 0
         self.training['accuracy'] = []
 
-        self.classifiers = {i: SGDClassifier(loss='log', fit_intercept=True) for i in classes}
+        self.classifiers = {i: SGDClassifier(loss='log') for i in classes}
 
         t_start = time.time()
         for i in range(n_iter):
@@ -171,6 +174,7 @@ class Corpus(object):
                 y_train = self.labelizer.fit_transform(
                     [[k for k in key.split('\n') if k != ''] for key in keywords]
                 )
+                # print y_train
                 # i (row): single document
                 # j (col): keyword
                 # [
@@ -186,13 +190,11 @@ class Corpus(object):
                 # Y = [1, 0, 1, 0]
 
                 for label in classes:
-
                     y_t = y_train[:, self.labelizer.classes.index(label)]
-                    print y_t, y_t.shape, X_train.shape
                     self.classifiers[label].partial_fit(
                         X=X_train,
                         y=y_t,
-                        classes=[label, u'not {}'.format(label)]
+                        classes=[0, 1]
                     )
 
             self.training['n_train'] += 1
@@ -213,9 +215,8 @@ class Corpus(object):
             for label in self.classifiers:
 
                 p = self.classifiers[label].predict(x)
-                print label, self.classifiers[label].predict_proba(x), self.classifiers[label].classes_
-                if p != u'not {}'.format(label):
-                    x_labels.extend(p)
+                if p == 1:
+                    x_labels.append(label)
 
             labels.append(x_labels)
 
