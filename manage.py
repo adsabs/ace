@@ -10,7 +10,7 @@ import argparse
 
 from ace import Corpus
 from cPickle import Unpickler
-from sklearn.metrics import confusion_matrix, accuracy_score
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
 
 def fit_corpus(data_path):
@@ -27,30 +27,36 @@ def fit_corpus(data_path):
             corpus.classifiers = pickle.load()
     else:
         print('Training')
-        corpus.train(batch_size=50, n_iter=10)
+        corpus.train(batch_size=200, n_iter=1)
 
     # Try it on the test data
-    test_text, test_keyword = [], []
-    for text in glob.glob('data/GRBs/test/*.txt'):
-        with codecs.open(text, 'r', 'utf-8') as f:
-            test_text.append(f.read())
+    test_x = corpus.vectorizer.transform(corpus.test_X_raw)
+    pred_y = corpus.predict(test_x)
 
-        keyword = text.replace('.txt', '.key')
-        with codecs.open(keyword, 'r', 'utf-8') as f:
-            test_keyword.append([i.strip() for i in f.readlines() if i != ''])
+    print('Classes: {}'.format(', '.join(corpus.classifiers.keys())))
+    for label in corpus.classifiers:
 
-    test_X = corpus.vectorizer.transform(test_text)
-    pred_Y = corpus.predict(test_X)
+        print('Label: {}'.format(label))
+        print('----------')
 
-    cm = confusion_matrix(test_keyword, pred_Y)
-    recall = corpus.recall(pred_Y, test_keyword)
-    precision = corpus.precision(pred_Y, test_keyword)
+        predict_y = corpus.predictions[label]
+        truth_y = [1 if label in i else 0 for i in corpus.test_Y_raw]
 
-    print('Confusion matrix:\n{}'.format(cm))
-    print('Accuracy: {}'.format(accuracy_score(test_keyword, pred_Y)))
-    print('Recall: {}'.format(recall))
-    print('Precision: {}'.format(precision))
+        print('Confusion matrix:\n {}'
+              .format(confusion_matrix(truth_y, predict_y, labels=[0, 1])))
+        print('Classification report: {}'
+              .format(classification_report(truth_y, predict_y, labels=[0, 1])))
+        print('Accuracy: {}'
+              .format(accuracy_score(truth_y, predict_y)))
+        print('\n\n')
 
+    recall = corpus.recall(pred_y, corpus.test_Y_raw)
+    precision = corpus.precision(pred_y, corpus.test_Y_raw)
+
+    print('Training details: {}'.format(corpus.training))
+    print('Average recall: {}'.format(recall))
+    print('Average precision: {}'.format(precision))
+#
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()

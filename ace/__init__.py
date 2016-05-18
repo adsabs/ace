@@ -7,6 +7,7 @@ import os
 import glob
 import time
 import math
+import numpy
 import codecs
 import itertools
 
@@ -46,25 +47,20 @@ class Corpus(object):
     """
 
     def __init__(self, data_path='ace/data'):
+
+        # Define the hash vector and labelizer
         self.vectorizer = HashingVectorizer(
             encoding='utf-8',
-            # strip_accents='unicode',
-            # analyzer='word',
-            # stop_words='english',
-            # lowercase=True,
-            # norm=None,
             binary=False,
             non_negative=True,
-            # decode_error='ignore',
-            # n_features=2**18,
-            # non_negative=True,
-            # norm=None,
+            n_features=2**18,
             analyzer=text_to_vector
         )
-        # self.classifier = SGDClassifier(loss='log')
         self.labelizer = None
 
+        # Find the training data
         self.training_path = os.path.expanduser('{}/train'.format(data_path))
+        self.testing_path = os.path.expanduser('{}/test'.format(data_path))
 
         docs = glob.glob('{}/*.txt'.format(self.training_path))
         self.training_documents = []
@@ -72,6 +68,25 @@ class Corpus(object):
         for i in range(len(docs)):
             self.training_documents.append(docs[i])
             self.training_keywords.append(docs[i].replace('.txt', '.key'))
+
+        # Find the test data
+        docs = glob.glob('{}/*.txt'.format(self.testing_path))
+        self.testing_documents = []
+        self.testing_keywords = []
+        for i in range(len(docs)):
+            self.testing_documents.append(docs[i])
+            self.testing_keywords.append(docs[i].replace('.txt', '.key'))
+
+        # Load the contents of the raw test data
+        self.test_X_raw = []
+        self.test_Y_raw = []
+        for text in self.testing_documents:
+            with codecs.open(text, 'r', 'utf-8') as f:
+                self.test_X_raw.append(f.read())
+
+            keyword = text.replace('.txt', '.key')
+            with codecs.open(keyword, 'r', 'utf-8') as f:
+                self.test_Y_raw.append([i.strip() for i in f.readlines() if i != ''])
 
         self.training = dict()
 
@@ -144,8 +159,6 @@ class Corpus(object):
             batch_size=batch_size
         )
 
-        print 'Classes', classes
-
         self.labelizer = MultiLabelBinarizer(classes=classes)
 
         self.training['n_train'] = 0
@@ -207,20 +220,32 @@ class Corpus(object):
         Prediction for X using one-vs-rest, multilabel classification
         :param X: data to put in the function
         """
+
+        self.predictions = {}
+
+        for label in self.classifiers:
+            self.predictions[label] = self.classifiers[label].predict(X)
+
         labels = []
+        for i in range(X.shape[0]):
+            labels.append([
+                l for l in self.classifiers if self.predictions[l][i] == 1
+            ])
 
-        for x in X:
-            x_labels = []
+        # labels = []
+        #
+        # for x in X:
+        #     x_labels = []
+        #
+        #     for label in self.classifiers:
+        #
+        #         p = self.classifiers[label].predict(x)
+        #         if p == 1:
+        #             x_labels.append(label)
+        #
+        #     labels.append(numpy.array(x_labels))
 
-            for label in self.classifiers:
-
-                p = self.classifiers[label].predict(x)
-                if p == 1:
-                    x_labels.append(label)
-
-            labels.append(x_labels)
-
-        return labels
+        return numpy.array(labels)
 
     def recall(self, Y_exp, Y_pred):
         """
