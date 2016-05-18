@@ -10,14 +10,20 @@ import math
 import numpy
 import codecs
 import itertools
+import logging
+import logging.config
 
-from sklearn import metrics
+from sklearn.linear_model import SGDClassifier
 from sklearn.preprocessing import MultiLabelBinarizer
+from sklearn.cross_validation import train_test_split
 from sklearn.feature_extraction.text import HashingVectorizer
-from sklearn.linear_model import SGDClassifier, SGDRegressor
 
 from textblob import TextBlob
 from nltk.corpus import stopwords
+from cPickle import Pickler, Unpickler
+from .config import ACE_LOGGING
+
+logging.config.dictConfig(ACE_LOGGING)
 
 
 def text_to_vector(fulltext):
@@ -88,7 +94,21 @@ class Corpus(object):
             with codecs.open(keyword, 'r', 'utf-8') as f:
                 self.test_Y_raw.append([i.strip() for i in f.readlines() if i != ''])
 
-        self.training = dict()
+        # Parameter definitions
+        self.training = None
+        self.classifiers = None
+        self.predictions = {}
+        self.training = {
+            'n_train': 0,
+            'total_time_taken': 0,
+            'accuracy': []
+        }
+
+        # Logging
+        self.logger = logging.getLogger('Ace')
+        self.logger.info('Corpus instantiated from folder: {}'.format(data_path))
+        self.logger.info('Found: {} training documents'.format(len(self.training_documents)))
+        self.logger.info('Found: {} testing documents'.format(len(self.testing_documents)))
 
     def get_batch(self, document_list=[], batch_start=0, batch_size=1):
         """
@@ -144,9 +164,10 @@ class Corpus(object):
 
         return hashmap.keys()
 
-    def train(self, X_training_data=None, y_training_data=None, batch_size=1, n_iter=1):
+    def train(self, X_training_data=None, y_training_data=None, batch_size=1, n_iter=1, train_size=None):
         """
         Use the training documents to fit a classifier.
+        TODO: parameter definitions
         """
         if X_training_data is None:
             X_training_data = self.training_documents
@@ -154,21 +175,26 @@ class Corpus(object):
         if y_training_data is None:
             y_training_data = self.training_keywords
 
+        if train_size is not None:
+            X_training_data, _, y_training_data, _ = train_test_split(
+                X_training_data, y_training_data, train_size=train_size
+            )
+
         classes = self.get_classes(
-            document_list=self.training_keywords,
+            document_list=y_training_data,
             batch_size=batch_size
         )
 
         self.labelizer = MultiLabelBinarizer(classes=classes)
-
-        self.training['n_train'] = 0
-        self.training['total_time_taken'] = 0
-        self.training['accuracy'] = []
-
         self.classifiers = {i: SGDClassifier(loss='log') for i in classes}
 
+        counter = 0
+        batches = int(math.ceil(len(X_training_data)/(batch_size*1.0)))
         t_start = time.time()
         for i in range(n_iter):
+
+            self.logger.info('Iteration: {}/{}'.format((i+1), n_iter))
+
             for documents, keywords in itertools.izip_longest(
                     self.document_batch(
                         document_list=X_training_data,
@@ -177,6 +203,8 @@ class Corpus(object):
                         document_list=y_training_data,
                         batch_size=batch_size)
             ):
+                counter += 1
+                self.logger.info('\tBatch: {}/{}'.format(counter, batches))
 
                 X_train = self.vectorizer.transform(documents)
 
@@ -194,7 +222,8 @@ class Corpus(object):
                 #   [1, 0, 1, 0],
                 #   [0, 1, 1, 1]
                 # ]
-                # Want to pass a block X of documents, with a single keyword, 1 or 0
+                # Want to pass a block X of documents, with a single keyword,
+                #  1 or 0
                 # For example, the first classifier would receive:
                 # X = [
                 #  [1, 30, 40, 1, 3, 50]
@@ -220,8 +249,6 @@ class Corpus(object):
         Prediction for X using one-vs-rest, multilabel classification
         :param X: data to put in the function
         """
-
-        self.predictions = {}
 
         for label in self.classifiers:
             self.predictions[label] = self.classifiers[label].predict(X)
@@ -250,6 +277,7 @@ class Corpus(object):
     def recall(self, Y_exp, Y_pred):
         """
         Recall
+        TODO: write explanation
         :param Y_exp:
         :param Y_pred:
         :return:
@@ -262,15 +290,19 @@ class Corpus(object):
             tp = sum(true_positive)*1.0
             fn = sum(false_negative)*1.0
 
-            recall.append(
-                tp / (tp + fn)
-            )
+            if (tp + fn) == 0:
+                recall.append(0)
+            else:
+                recall.append(
+                    tp / (tp + fn)
+                )
 
-        return sum(recall) / len(recall)*1.0
+        return sum(recall) / (len(recall)*1.0)
 
     def precision(self, Y_exp, Y_pred):
         """
         Precision
+
         :param Y_exp:
         :param Y_pred:
         :return:
@@ -288,11 +320,12 @@ class Corpus(object):
                 tp / (tp + fp)
             )
 
-        return sum(precision) / len(precision)*1.0
+        return sum(precision) / (len(precision)*1.0)
 
     def fbeta_score(self, precision, recall, beta):
         """
         F-beta score
+        TODO: write explanation
         :param precision:
         :param recall:
         :param beta:
@@ -300,27 +333,28 @@ class Corpus(object):
         """
         return (1+beta**2)*(precision*recall)/(beta**2*precision + recall)
 
-    def save(self):
+    def save(self, model_path=None):
         """
-        Save model to disk
+        Save the classifier model to disk in pickle format
+        :param model_path: path to save models
+        :type model_path: str
         """
-        from cPickle import Pickler
+        path = 'models/classifiers.m' if model_path is None else model_path
 
         if self.classifiers:
-            with open('models/classifiers.m', 'w') as f:
+            with open(path, 'w') as f:
                 pickle = Pickler(f, -1)
                 pickle.dump(self.classifiers)
 
-    #
-    # def evaluate(self, Y_exp, Y_pred):
-    #
-    #     precision, recall = [], []
-    #     for i, j in zip(Y_exp, Y_pred):
-    #
-    #         print 'yexp', Y_exp
-    #         print 'ypred', Y_pred
-    #
-    #         precision.append(metrics.precision_score(i, j))
-    #         recall.append(metrics.recall_score(i, j))
-    #
-    #     return precision, recall
+    def load(self, model_path):
+        """
+        Load the pickled classifier model from disk
+        :param model_path: path to the model
+        :type model_path: str
+        """
+        try:
+            with open(model_path) as f:
+                pickle = Unpickler(f)
+                self.classifiers = pickle.load()
+        except IOError:
+            self.logger.info('Could not load model: {}'.format(model_path))

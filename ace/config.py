@@ -16,7 +16,7 @@ ACE_LOGGING = {
         },
     },
     'loggers': {
-        '': {
+        'Ace': {
             'handlers': ['console'],
             'level': 'DEBUG',
             'propagate': True,
