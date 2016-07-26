@@ -346,6 +346,11 @@ class Corpus(object):
                 pickle = Pickler(f, -1)
                 pickle.dump(self.classifiers)
 
+        if self.vectorizer:
+            with open(path.replace('.m', '.vec'), 'w') as f:
+                pickle = Pickler(f, -1)
+                pickle.dump(self.vectorizer)
+
     def load(self, model_path):
         """
         Load the pickled classifier model from disk
@@ -356,5 +361,10 @@ class Corpus(object):
             with open(model_path) as f:
                 pickle = Unpickler(f)
                 self.classifiers = pickle.load()
+
+            with open(model_path.replace('.m', '.vec')) as f:
+                pickle = Unpickler(f)
+                self.vectorizer = pickle.load()
+
         except IOError:
             self.logger.info('Could not load model: {}'.format(model_path))

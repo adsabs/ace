@@ -1,3 +1,4 @@
+ACE_MODEL_PATH = 'models/classifiers.m'
 ACE_LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -16,7 +17,7 @@ ACE_LOGGING = {
         },
     },
     'loggers': {
-        'Ace': {
+        '': {
             'handlers': ['console'],
             'level': 'DEBUG',
             'propagate': True,

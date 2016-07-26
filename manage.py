@@ -4,7 +4,9 @@ Manage scripts for running Ace
 """
 import sys
 import time
+import json
 import numpy
+import codecs
 import logging
 import argparse
 import matplotlib.pyplot as plt
@@ -33,8 +35,9 @@ def fit_corpus(data_path, save=False, load=False, model_path=u'models/classifier
             pass
 
     if corpus.classifiers is None:
-        logger.info(u'Training on batches')
-        corpus.train(batch_size=200, n_iter=1)
+        batch_size = 200
+        logger.info(u'Training on batches with size: {}'.format(batch_size))
+        corpus.train(batch_size=batch_size, n_iter=1)
 
     if save:
         corpus.save()
@@ -44,6 +47,7 @@ def fit_corpus(data_path, save=False, load=False, model_path=u'models/classifier
     test_x = corpus.vectorizer.transform(corpus.test_X_raw)
     pred_y = corpus.predict(test_x)
 
+    meta_info = dict(labels={})
     logger.info(u'Classes: {}'.format(', '.join(corpus.classifiers.keys())))
     for label in corpus.classifiers:
 
@@ -53,17 +57,47 @@ def fit_corpus(data_path, save=False, load=False, model_path=u'models/classifier
         predict_y = corpus.predictions[label]
         truth_y = [1 if label in i else 0 for i in corpus.test_Y_raw]
 
+        meta_info['labels'][label] = {}
+        meta_data = meta_info['labels'][label]
+        meta_data['confusion matrix'] = \
+            confusion_matrix(truth_y, predict_y, labels=[0, 1])
+        meta_data['classification report'] = \
+            classification_report(truth_y, predict_y, labels=[0, 1])
+        meta_data['accuracy score'] = accuracy_score(truth_y, predict_y)
+
         logger.info(u'Confusion matrix:\n {}'
-                    .format(confusion_matrix(truth_y, predict_y, labels=[0, 1])))
+                    .format(meta_data['confusion matrix']))
         logger.info(u'Classification report:\n {}'
-                    .format(classification_report(truth_y, predict_y, labels=[0, 1])))
+                    .format(meta_data['classification report']))
         logger.info(u'Accuracy: {}'
-                    .format(accuracy_score(truth_y, predict_y)))
+                    .format(meta_data['accuracy score']))
         logger.info(u'===============')
         logger.info(u'')
 
+        meta_data['confusion matrix'] = meta_data['confusion matrix'].tolist()
+
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        ax.matshow(meta_data['confusion matrix'], cmap=plt.cm.binary, interpolation='nearest')
+        ax.set_xlabel('predicted')
+        ax.set_ylabel('expected')
+
+        ax.set_xticks([0.0, 1.0])
+        ax.set_xticklabels([label, 'not {}'.format(label)])
+
+        ax.set_yticks([0.0, 1.0])
+        ax.set_yticklabels([label, 'not {}'.format(label)])
+
+        plt.savefig('ace/static/confusion_matrix_{}.png'.format(label))
+        meta_data['confusion matrix image'] = 'static/confusion_matrix_{}.png'.format(label)
+
     recall = corpus.recall(pred_y, corpus.test_Y_raw)
     precision = corpus.precision(pred_y, corpus.test_Y_raw)
+
+    meta_info['average recall'] = recall
+    meta_info['average precision'] = precision
+    with codecs.open('models/meta_data.json', 'w', 'utf-8') as f:
+        json.dump(meta_info, f)
 
     logger.info(u'Training details: {}'.format(corpus.training))
     logger.info(u'Average recall: {}'.format(recall))
@@ -128,7 +162,6 @@ def investigate_train_size(data_path, save=False, load=False):
 
         if save:
             corpus.save(mode_path=model_path)
-
 
     # Make the plot
     fig = plt.figure(0)

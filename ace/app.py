@@ -5,10 +5,11 @@ Application factory
 
 import logging.config
 
+from ace import Corpus
 from flask import Flask
 from flask.ext.watchman import Watchman
 from flask.ext.restful import Api
-from views import ConceptView
+from views import ConceptView, ReportView
 
 
 def create_app():
@@ -17,7 +18,7 @@ def create_app():
     :return: application
     """
 
-    app = Flask(__name__, static_folder=None)
+    app = Flask(__name__, static_folder='static')
     app.url_map.strict_slashes = False
 
     # Load config and logging
@@ -26,12 +27,20 @@ def create_app():
         app.config['ACE_LOGGING']
     )
 
+    # Load corpus into the application
+    corpus = Corpus()
+    corpus.load(
+        app.config['ACE_MODEL_PATH']
+    )
+    app.config['CORPUS'] = corpus
+
     # Register extensions
     Watchman(app, version=dict(scopes=['']))
     api = Api(app)
 
     # Add the end resource end points
     api.add_resource(ConceptView, '/concept', methods=['POST'])
+    api.add_resource(ReportView, '/report', methods=['GET'])
     return app
 
 

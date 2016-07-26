@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+    <header>
+        <title>
+            A concept extraction tool
+        </title>
+    </header>
+
+    <body>
+
+        <h1>
+            General overview
+        </h1>
+        <b>Average recall</b>: {{ meta_data['average recall'] }}
+        <br>
+        <b>Average precision</b>: {{ meta_data['average precision'] }}
+        <hr>
+
+        <h1>
+            Label overviews
+        </h1>
+        <hr>
+        {% for label in meta_data['labels'].keys() %}
+        <ul>
+            <li><b>label</b>: {{ label }}</li>
+            <li>classification report: {{ meta_data['labels'][label]['classification report'] }}</li>
+            <li>confusion matrix: {{ meta_data['labels'][label]['confusion matrix'] }}</li>
+            <li><img src="/{{ meta_data['labels'][label]['confusion matrix image'] }}" width="600px"/></li>
+        </ul>
+        {% endfor %}
+
+    </body>
+
+</html>
